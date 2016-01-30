@@ -1,0 +1,102 @@
+---
+title: "PML - Course Project"
+author: "Mike Danielson"
+date: '`r Sys.Date()`'
+output: html_document
+---
+My work consists of the following code chunks:
+
+        Chunk-1: Set Global RMD Settings -- set default options to be used for all code chunks
+        
+        Chunk-2: Set-up Environment -- install and load required packages; download raw data; code also downloads any new packages and displays package versions
+        
+        Chunk-3: Pre-process Data -- cleaned data by replacing NA's with blanks; used my common sense to eliminate data columns that should be be good predictors; eliminated data columns with > 90% blanks; partitioned the data 60/40 for training and testing
+        
+        Chunk-4: Model Fit -- used the random forest method to train the model; included measurement of elapsed computing time for training; to improve performance, parallel CPU processing was utilized
+        
+        Chunk-5: Measure Testing Error -- calculated the overall accruacy of the model against data excluded from training, also provided a table of reference vs. prediction for the dependent variable to identify any systematic errors
+        
+        Chunk-6: Quiz -- downloaded the quiz data; performed the same preprocessing that was used for training and out of sample testing; predicted the  dependent variable with the model
+
+My observations and conclusions for this assignment are:
+
+        1. Pre-processing the data is very important. Prior to removing the irrelevant columns, I attempted to fit the model. This resulted in very poor performance and erroneous results. After pre-processing the data, the model worked very well without much effort.
+        
+        2. Cross validation (exluding data for the test set) provided a good assessment of the model's accuracy. The out of sample error was so low that I had very high confidence of achieving 20/20 on the quiz.
+        
+        3. Measuring the testing error, especially the table of prediction vs. reference, allowed me to conclude the that model is very good. With only 2 errors in the out of sample data, I did not see a reason to continue working on the model to achieve better performance.
+        
+        4. As expected, I achieved 20/20 on the Quiz.
+        
+        5. To allow for an efficient peer reviews process, I kept this write-up concise. Providing alternative models and additional analysis of the results is not necessary.
+
+Chunk-1: Set Global RMD Settings --
+```{r global options, tidy=TRUE,cache=TRUE, warning=FALSE,echo=TRUE, message=FALSE}
+        knitr::opts_chunk$set(tidy=TRUE,cache=TRUE, warning=FALSE,echo=TRUE)
+```
+Chunk-2: Set-up Environment
+```{r environment, message=FALSE, eval=TRUE, echo=FALSE}
+        p="caret"
+                if(is.element(p,installed.packages()[,1])==FALSE){install.packages(p)}
+                library(p,character.only = TRUE)
+                paste(p,packageVersion(p))
+
+        p="plyr"
+                if(is.element(p,installed.packages()[,1])==FALSE){install.packages(p)}
+                library(p,character.only = TRUE)
+                paste(p,packageVersion(p))
+        p="parallel"
+                if(is.element(p,installed.packages()[,1])==FALSE){install.packages(p)}
+                library(p,character.only = TRUE)
+                paste(p,packageVersion(p))
+        p="doParallel"
+                if(is.element(p,installed.packages()[,1])==FALSE){install.packages(p)}
+                library(p,character.only = TRUE)
+                paste(p,packageVersion(p))
+        p="randomForest"
+                if(is.element(p,installed.packages()[,1])==FALSE){install.packages(p)}
+                library(p,character.only = TRUE)
+                paste(p,packageVersion(p))
+        if(file.exists("training.csv")==FALSE){
+                download.file(url =
+                "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="training.csv")}
+        if(file.exists("testing.csv")==FALSE){
+                download.file(url =
+                "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="testing.csv")}
+```
+Chunk-3: Pre-process Data
+```{r pre-process, message=FALSE, eval=TRUE}
+        data <- read.csv("training.csv")
+        data <- subset(data, select=-c(X,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window,num_window))
+        is.na(data) <- data==""
+        keep_cols <- as.data.frame(colSums(is.na(data))/nrow(data))
+        names(keep_cols)="na_ratio"
+        keep_cols <- subset(keep_cols, na_ratio < 0.9)
+        data <- data[,rownames(keep_cols)]
+        inTrain <- createDataPartition(y=data$classe, p = .6, list=FALSE, times = 1)
+        training <- data[inTrain,]
+        testing <- data[-inTrain,]
+```
+Chunk-4: Model Fit
+```{r model fit, message=FALSE, eval=TRUE}
+        cluster <- makeCluster(detectCores() - 1)
+        registerDoParallel(cluster)
+        ptm <- proc.time()
+        set.seed(1234)
+        RFfit <- train(classe~ .,data=training,method="rf")
+        paste("training time = ",as.character(proc.time()-ptm)[3],"seconds")
+        stopCluster(cluster)
+```
+Chunk-5: Measure Testing Error
+```{r testing error, message=FALSE, eval=TRUE}
+        RFpred <- predict(RFfit,testing)
+        confusionMatrix(RFpred,testing$classe)$overall['Accuracy']
+        confusionMatrix(RFpred,testing$classe)$table
+```
+Chunk-6: Quiz
+```{r Quiz, message=FALSE, eval=TRUE}
+        quizdata <- read.csv("testing.csv")
+        keepcols_quiz <- rownames(keep_cols)[1:nrow(keep_cols)-1]
+        quizdata <- quizdata[,keepcols_quiz]
+        predict(RFfit,quizdata)
+```
